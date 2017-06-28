@@ -1,0 +1,19 @@
+{
+    "name": "jiangyu/php-js",
+    "description": "php js communication practice",
+    "type": "project",
+    "require": {
+        "dnode/dnode": "^0.2.0"
+    },
+    "require-dev": {
+        "symfony/var-dumper": "^3.3",
+        "escapestudios/symfony2-coding-standard": "^2.11"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "JiangYu",
+            "email": "yu.jiang@funplus.com"
+        }
+    ]
+}
