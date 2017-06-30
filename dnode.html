@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>dnode</title>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <link rel="stylesheet" media="screen" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="https://cdn.bootcss.com/rxjs/4.0.8/rx.lite.js"></script>
+    <script src="node_modules/renderjson/renderjson.js"></script>
+    <style type="text/css">
+        .renderjson a {
+            text-decoration: none;
+        }
+
+        .renderjson .disclosure {
+            color: crimson;
+            font-size: 100%;
+        }
+
+        .renderjson .syntax {
+            color: grey;
+        }
+
+        .renderjson .string {
+            color: darkred;
+        }
+
+        .renderjson .number {
+            color: darkcyan;
+        }
+
+        .renderjson .boolean {
+            color: blueviolet;
+        }
+
+        .renderjson .key {
+            color: darkblue;
+        }
+
+        .renderjson .keyword {
+            color: blue;
+        }
+
+        .renderjson .object.syntax {
+            color: lightseagreen;
+        }
+
+        .renderjson .array.syntax {
+            color: orange;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="form-group-sm">
+        <div class="form-inline">
+            <div class="input-group col-sm-2">
+                <div class="input-group-addon">itemid:</div>
+                <input class="form-control" id="itemid" type="number" min="1" value="100" autofocus title="itemid"
+                       autocomplete="off">
+            </div>
+            <div class="input-group">
+                <code style="white-space: normal;" id="hints"></code>
+            </div>
+        </div>
+    </div>
+    <div>
+        <pre id="itemJson" style="white-space: normal;"></pre>
+        <div id="item"></div>
+    </div>
+</div>
+
+<script>
+    const $item = $("#item");
+    const $itemid = $("#itemid");
+    const $itemJson = $("#itemJson");
+    const $hints = $("#hints");
+    renderjson.set_show_to_level(10);
+
+    const host = window.location.protocol === "file:" ? "localhost" : "farm-dev3.socialgamenet.com";
+
+    let itemids;
+    $.ajax({
+        url: `http://${host}:3000/ids`,
+        dataType: "json",
+    }).then((data) => {
+        itemids = data;
+        setHintHandler();
+        setItemHandler();
+        focusOnItemid();
+        $itemid.trigger("keyup"); // show hints
+    });
+
+    /**
+     * @param {int} itemid
+     * @returns {Promise}
+     */
+    function fuzzyList(itemid) {
+        return new Promise((resolve) => {
+            const matchIds = [];
+            let pattern = new RegExp(`^${itemid}`);
+            for (let id in itemids) {
+                if (!itemids.hasOwnProperty(id)) {
+                    continue;
+                }
+                if (pattern.test(id)) {
+                    matchIds.push(id);
+                }
+            }
+            resolve(matchIds);
+        });
+    }
+    /**
+     * @param {int} itemid
+     * @returns {Promise}
+     */
+    function getStoreItem(itemid) {
+        if (!itemids.hasOwnProperty(itemid)) {
+            return new Promise((resolve) => {
+                resolve({error: `no item found with id ${itemid}`});
+            });
+        }
+        return $.ajax({
+                url: `http://${host}:3000/store`,
+                dataType: "json",
+                data: {
+                    id: itemid,
+                }
+            })
+            .promise();
+    }
+
+    function setHintHandler() {
+        Rx.Observable.fromEvent($itemid, "keyup")
+            .filter(event => event.keyCode !== 13)
+            .map(event => event.target.value)
+            .flatMapLatest(fuzzyList)
+            .subscribe(ids => {
+                if (!Array.isArray(ids) || ids.length === 0) {
+                    $hints.text("no id found");
+                    return;
+                }
+                if (ids.length === 1) {
+                    $hints.text(ids[0]);
+                    $itemid.trigger($.Event("keyup", {keyCode: 13}));
+                    return;
+                }
+                $hints.text(ids.join(" "));
+            });
+    }
+
+    function setItemHandler() {
+        Rx.Observable.fromEvent($itemid, "keyup")
+            .map(event => {
+                if (event.keyCode === 13 || event.keyCode === 38 || event.keyCode === 40) {
+                    return event.target.value;
+                }
+            })
+            .filter(itemid => itemid !== undefined)
+            .throttle(500 /* ms */)
+            .distinctUntilChanged()
+            .flatMapLatest(getStoreItem)
+            .subscribe(data => {
+                $itemJson.text(JSON.stringify(data));
+                if (data.hasOwnProperty("error")) {
+                    return;
+                }
+                $item.empty();
+                $item.append(renderjson(data));
+            });
+    }
+
+    function focusOnItemid() {
+        Rx.Observable.fromEvent($("body"), "keyup")
+            .map(event => event.keyCode)
+            .filter(keyCode => keyCode === 13)
+            .subscribe(() => {
+                document.getElementById("itemid").focus();
+            });
+    }
+</script>
+
+</body>
+</html>
